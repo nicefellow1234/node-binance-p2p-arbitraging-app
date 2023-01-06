@@ -19,7 +19,9 @@ app.get('/get-results', async (req, res) => {
   let sellCurrency = req.query.sellCurrency;
 
   await axios
-    .get('https://api.exchangerate.host/convert?from=GBP&to=PKR')
+    .get(
+      `https://api.exchangerate.host/convert?from=${buyCurrency}&to=${sellCurrency}`
+    )
     .then((response) => {
       exchangeData = response.data;
     });
