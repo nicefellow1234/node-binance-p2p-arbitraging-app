@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Binance P2P Arbitraging Calculator</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="mb-3 mt-5 text-center">Binance P2P Arbitraging App</h1>
+      <div id="app">
+        <form v-on:submit.prevent="getResults">
+          <h3>BUY</h2>
+          <div class="mb-3">
+            <label class="form-label">Currency</label>
+            <input
+              type="text"
+              class="form-control"
+              v-model="buyCurrency"
+            />
+          </div>
+          <div class="mb-3">
+              <label class="form-label">Amount</label>
+              <input
+                type="text"
+                class="form-control"
+                v-model="buyAmount"
+              />
+          </div>
+          <h3>SELL</h2>
+              <div class="mb-3">
+                <label class="form-label">Currency</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  v-model="sellCurrency"
+                />
+              </div>
+              <div class="mb-3">
+                  <h2>Buy Details</h2>
+                  <div class="h3"><span class="fw-bold">Advertiser: </span> {{ buyAdvertiser }}</div>
+                  <div class="h3"><span class="fw-bold">Price: </span> {{ buyPrice }}</div>
+                  <div class="h3"><span class="fw-bold">USDT Amount: </span> {{ boughtUSDT }}</div>
+                  <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${buyAdvId}`" target="_blank" class="btn btn-primary">Visit Ad {{ buyAdvId }}</a>
+                  <h2>Sell Details</h2>
+                  <div class="h3"><span class="fw-bold">Advertiser: </span> {{ sellAdvertiser }}</div>
+                  <div class="h3"><span class="fw-bold">Price: </span> {{ sellPrice }}</div>
+                  <div class="h3"><span class="fw-bold">{{ sellCurrency }} Amount: </span> {{ soldCurrencyAmount }}</div>
+                  <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${sellAdvId}`"  target="_blank" class="btn btn-primary">Visit Ad {{ sellAdvId }}</a>
+                  <h2>Fiat Details</h2>
+                  <div class="h3"><span class="fw-bold">Exchange Rate: </span> {{ fiatRate }} {{ sellCurrency }} </div>
+                  <div class="h3"><span class="fw-bold">Total Exchanged Amount: </span> {{ fiatTotalAmount }} {{ sellCurrency }}</div>
+              </div>
+              <button type="submit" class="btn btn-primary">Submit</button>
+        </form>
+      </div>
+    </div>
+  </body>
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-w76AqPfDkMBDXo30jS1Sgez6pr3x5MlQ1ZAGC+nuZB+EYdgRZgiwxhTBTkF7CXvN"
+    crossorigin="anonymous"
+  ></script>
+  <script src="https://unpkg.com/vue@next"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script>
+    Vue.createApp({
+      data() {
+        return { 
+          buyCurrency: 'GBP',
+          buyAmount: 143,
+          sellCurrency: 'PKR',
+          buyAdvId: null, 
+          buyAdvertiser: null,
+          buyPrice: null,
+          boughtUSDT: null,
+          sellAdvId: null,
+          sellAdvertiser: null,
+          sellPrice: null,
+          soldCurrencyAmount: null,
+          fiatRate: null,
+          fiatTotalAmount: null
+        };
+      },
+      methods: { 
+        getResults() {
+          axios.get('/get-results', {
+            params: {
+              buyCurrency: this.buyCurrency,
+              buyAmount: this.buyAmount,
+              sellCurrency: this.sellCurrency
+            }
+          }).then((response) => {
+              this.buyAdvId = response.data.buyAdvId;
+              this.buyAdvertiser = response.data.buyAdvertiser;
+              this.buyPrice = response.data.buyPrice;
+              this.boughtUSDT = response.data.boughtUSDT;
+              this.sellAdvId = response.data.sellAdvId;
+              this.sellAdvertiser = response.data.sellAdvertiser;
+              this.sellPrice = response.data.sellPrice;
+              this.soldCurrencyAmount = response.data.soldCurrencyAmount;
+              this.fiatRate = response.data.fiatRate;
+              this.fiatTotalAmount = response.data.fiatTotalAmount;
+          });
+        }
+      }
+    }).mount('#app');
+  </script>
+</html>
