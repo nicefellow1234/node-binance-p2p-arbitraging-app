@@ -11,12 +11,13 @@
       integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD"
       crossorigin="anonymous"
     />
+    <script src="https://kit.fontawesome.com/1823996335.js" crossorigin="anonymous"></script>
   </head>
   <body>
     <div class="container">
       <h1 class="mb-3 mt-5 text-center">Binance P2P Arbitraging App</h1>
       <div id="app">
-        <form v-on:submit.prevent="getResults">
+        <form v-on:submit.prevent="getResults" class="mb-5 p-5">
           <h3>BUY</h2>
           <div class="mb-3">
             <label class="form-label">Currency</label>
@@ -43,22 +44,36 @@
                   v-model="sellCurrency"
                 />
               </div>
+              <button type="submit" class="btn btn-primary btn-lg">Submit</button>
               <div class="mb-3">
-                  <h2>Buy Details</h2>
-                  <div class="h3"><span class="fw-bold">Advertiser: </span> {{ buyAdvertiser }}</div>
-                  <div class="h3"><span class="fw-bold">Price: </span> {{ buyPrice }}</div>
-                  <div class="h3"><span class="fw-bold">USDT Amount: </span> {{ boughtUSDT }}</div>
-                  <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${buyAdvId}`" target="_blank" class="btn btn-primary">Visit Ad {{ buyAdvId }}</a>
-                  <h2>Sell Details</h2>
-                  <div class="h3"><span class="fw-bold">Advertiser: </span> {{ sellAdvertiser }}</div>
-                  <div class="h3"><span class="fw-bold">Price: </span> {{ sellPrice }}</div>
-                  <div class="h3"><span class="fw-bold">{{ sellCurrency }} Amount: </span> {{ soldCurrencyAmount }}</div>
-                  <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${sellAdvId}`"  target="_blank" class="btn btn-primary">Visit Ad {{ sellAdvId }}</a>
-                  <h2>Fiat Details</h2>
-                  <div class="h3"><span class="fw-bold">Exchange Rate: </span> {{ fiatRate }} {{ sellCurrency }} </div>
-                  <div class="h3"><span class="fw-bold">Total Exchanged Amount: </span> {{ fiatTotalAmount }} {{ sellCurrency }}</div>
+                  <div v-show="processingIcon" class="mt-3 text-center">
+                    <i class="fa-solid fa-arrows-spin fa-spin fa-6x"></i>
+                  </div>
+                  <div v-show="showData">
+                    <div class="row">
+                      <div class="col-sm-4 mt-3">
+                        <h2>Buy Details</h2>
+                        <div class="h4"><span class="fw-bold">Advertiser: </span> {{ buyAdvertiser }}</div>
+                        <div class="h4"><span class="fw-bold">Price: </span> {{ buyPrice }}</div>
+                        <div class="h4"><span class="fw-bold">Amount: </span> {{ boughtUSDT }} USDT</div>
+                        <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${buyAdvId}`" target="_blank" class="btn btn-dark">Visit Ad {{ buyAdvId }}</a>
+                      </div>
+                      <div class="col-sm-4 mt-3">
+                        <h2>Sell Details</h2>
+                        <div class="h4"><span class="fw-bold">Advertiser: </span> {{ sellAdvertiser }}</div>
+                        <div class="h4"><span class="fw-bold">Price: </span> {{ sellPrice }}</div>
+                        <div class="h4"><span class="fw-bold">Amount: </span> {{ soldCurrencyAmount }} {{ sellCurrency }}</div>
+                        <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${sellAdvId}`"  target="_blank" class="btn btn-dark">Visit Ad {{ sellAdvId }}</a>
+                      </div>
+                      <div class="col-sm-4 mt-3">
+                        <h2>Fiat Details</h2>
+                        <div class="h4"><span class="fw-bold">Buy Amount: </span> {{ buyAmount }} {{ buyCurrency }} </div>
+                        <div class="h4"><span class="fw-bold">Exchange Rate: </span> {{ fiatRate }} {{ sellCurrency }} </div>
+                        <div class="h4"><span class="fw-bold">Total Amount: </span> {{ fiatTotalAmount }} {{ sellCurrency }}</div>
+                      </div>
+                    </div>
+                  </div>
               </div>
-              <button type="submit" class="btn btn-primary">Submit</button>
         </form>
       </div>
     </div>
@@ -73,7 +88,9 @@
   <script>
     Vue.createApp({
       data() {
-        return { 
+        return {
+          processingIcon: false,
+          showData: false,
           buyCurrency: 'GBP',
           buyAmount: 143,
           sellCurrency: 'PKR',
@@ -91,6 +108,9 @@
       },
       methods: { 
         getResults() {
+          // Hide the data and show the processing icon
+          this.processingIcon = true;
+          this.showData = false;
           axios.get('/get-results', {
             params: {
               buyCurrency: this.buyCurrency,
@@ -101,13 +121,17 @@
               this.buyAdvId = response.data.buyAdvId;
               this.buyAdvertiser = response.data.buyAdvertiser;
               this.buyPrice = response.data.buyPrice;
-              this.boughtUSDT = response.data.boughtUSDT;
+              this.boughtUSDT = Math.round(response.data.boughtUSDT * 100) / 100;
               this.sellAdvId = response.data.sellAdvId;
               this.sellAdvertiser = response.data.sellAdvertiser;
               this.sellPrice = response.data.sellPrice;
-              this.soldCurrencyAmount = response.data.soldCurrencyAmount;
+              this.soldCurrencyAmount = Math.round(response.data.soldCurrencyAmount * 100) / 100;
               this.fiatRate = response.data.fiatRate;
               this.fiatTotalAmount = response.data.fiatTotalAmount;
+
+              // Show data and hide the processing icon
+              this.processingIcon = false;
+              this.showData = true;
           });
         }
       }
