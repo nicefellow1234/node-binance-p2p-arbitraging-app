@@ -1,85 +1,143 @@
+require('dotenv').config();
+const nodeEnv = process.env.NODE_ENV;
+const testMode = nodeEnv === "TEST";
 const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const axios = require('axios');
+const https = require('https');
 
 const app = express();
 app.set('view engine', 'ejs');
+app.use(bodyParser.urlencoded({extended: true}));
 
-app.use(bodyParser.urlencoded({ extended: true }));
+/**
+ * Disable HTTPS/SSL requirement in development mode / company intranet environments where certificates pose an issue
+ * and throw UNABLE_TO_GET_ISSUER_CERT_LOCALLY exceptions
+ */
+if (testMode) {
+    axios.defaults.httpsAgent = new https.Agent({
+        rejectUnauthorized: false,
+    });
+    // eslint-disable-next-line no-console
+    console.log(nodeEnv, `RejectUnauthorized is disabled.`)
+}
+
+const defaultOpts = {
+    error: null,
+    asset: process.env.DEFAULT_ASSET || 'USDT',
+    buyCurrency: process.env.DEFAULT_BUY_CURRENCY || 'GBP',
+    buyAmount: process.env.DEFAULT_BUY_AMOUNT || 150,
+    sellCurrency: process.env.DEFAULT_SELL_CURRENCY || 'PKR'
+}
 
 // Render the app index page
 app.get('/', (req, res) => {
-  res.render('index');
+    res.render('index', defaultOpts);
 });
 
 // Calculate the data and return the data in JSON
 app.get('/get-results', async (req, res) => {
-  let exchangeData = null;
-  let buyAmount = req.query.buyAmount;
-  let buyCurrency = req.query.buyCurrency;
-  let sellCurrency = req.query.sellCurrency;
+    let exchangeData = null;
+    let asset = req.query.asset;
+    let buyAmount = req.query.buyAmount;
+    let buyCurrency = req.query.buyCurrency;
+    let sellCurrency = req.query.sellCurrency;
+    let apiError = null;
+    console.log("get-results: Buy " + asset + " worth " + buyAmount + " " + buyCurrency);
 
-  // Fetch the fiat exchange data from the API using the buyCurrency & sellCurrency
-  await axios
-    .get(
-      `https://api.exchangerate.host/convert?from=${buyCurrency}&to=${sellCurrency}`
-    )
-    .then((response) => {
-      exchangeData = response.data;
-    });
+    // Fetch the fiat exchange data from the API using the buyCurrency & sellCurrency
+    await axios
+        .get(
+            `https://api.exchangerate.host/convert?from=${buyCurrency}&to=${sellCurrency}`
+        )
+        .then((response) => {
+            exchangeData = response.data;
+        })
+        .catch(function (error) {
+            console.log("Error getting exchange rate. ErrorCode: " + error.cause.code  + ", ErrorMessage: " + error.cause.message);
+            //console.log(error);
+            apiError = prepareError(error);
+        });
 
-  // Calculate the fiat exchange total amount of the buyAmount
-  let fiatTotalAmount = Math.round(buyAmount * exchangeData.info.rate);
-
-  // Fetch buyCurrency P2P data using Wise payment method & buyAmount
-  let p2pBuyData = await fetchP2PData('BUY', buyAmount, 'Wise', buyCurrency);
-
-  // Select the first advertisement given it matches with our requirements
-  // Also since this would be the best price as well
-  let p2pBuyAdv = p2pBuyData.data[0];
-
-  // Calculate the boughtUSDT using the above advertisement price
-  let boughtUSDT = buyAmount / p2pBuyAdv.adv.price;
-
-  // Now fetch the sellCurrency P2P data using Bank Transfer payment method & fiatTotalAmount
-  let p2pSellData = await fetchP2PData(
-    'SELL',
-    fiatTotalAmount,
-    'BANK',
-    sellCurrency
-  );
-
-  // Now you need to look for the one ad where you can sell the USDT looking at the limits set by advertisers
-  // Once a suitable advertisement has been located then stop looking for more and use that one
-  let p2pSellAdv = null;
-  for (let i = 0; i < p2pSellData.data.length; i++) {
-    let ad = p2pSellData.data[i];
-    if (
-      ad.adv.minSingleTransQuantity < boughtUSDT &&
-      boughtUSDT < ad.adv.maxSingleTransQuantity
-    ) {
-      p2pSellAdv = ad;
-      break;
+    if (apiError != null) {
+        return sendErrorResponse(req, res, apiError.fullOutput);
     }
-  }
 
-  // Now calculate the final soldCurrencyAmount using the above selected advertisement price for selling
-  let soldCurrencyAmount = boughtUSDT * p2pSellAdv.adv.price;
+    if (exchangeData == null) {
+        return sendErrorResponse(req, res, "No exchange data found.");
+    }
 
-  // At last return all of the data to be rendered on the frontend
-  res.json({
-    buyPrice: p2pBuyAdv.adv.price,
-    boughtUSDT,
-    buyAdvId: p2pBuyAdv.advertiser.userNo,
-    buyAdvertiser: p2pBuyAdv.advertiser.nickName,
-    sellPrice: p2pSellAdv.adv.price,
-    soldCurrencyAmount,
-    sellAdvId: p2pSellAdv.advertiser.userNo,
-    sellAdvertiser: p2pSellAdv.advertiser.nickName,
-    fiatRate: exchangeData.info.rate,
-    fiatTotalAmount
-  });
+    // Calculate the fiat exchange total amount of the buyAmount
+    let fiatTotalAmount = Math.round(buyAmount * exchangeData.info.rate);
+
+    // Fetch buyCurrency P2P data using Wise payment method & buyAmount
+    let p2pBuyData = await fetchP2PData('BUY', buyAmount, 'Wise', buyCurrency, asset);
+
+    if (p2pBuyData.errorCode) {
+        return sendErrorResponse(req, res, "Unable to get purchase details: [" + p2pBuyData.errorCode + "] " + p2pBuyData.errorMessage);
+    }
+
+    // Select the first advertisement given it matches with our requirements
+    // Also since this would be the best price as well
+    let p2pBuyAdv = p2pBuyData.data[0];
+
+    if (p2pBuyAdv == null) {
+        return sendErrorResponse(req, res, "No buy advert found.");
+    }
+
+    // Calculate the boughtAsset using the above advertisement price
+    let boughtAsset = buyAmount / p2pBuyAdv.adv.price;
+
+    // Now fetch the sellCurrency P2P data using Bank Transfer payment method & fiatTotalAmount
+    let p2pSellData = await fetchP2PData(
+        'SELL',
+        fiatTotalAmount,
+        'BANK',
+        sellCurrency,
+        asset
+    );
+
+    if (p2pSellData.errorCode) {
+        return sendErrorResponse(req, res, "Unable to get sale details: [" + p2pSellData.errorCode + "] " + p2pSellData.errorMessage);
+    }
+
+    // Now you need to look for the one ad where you can sell the asset looking at the limits set by advertisers
+    // Once a suitable advertisement has been located then stop looking for more and use that one
+    let p2pSellAdv = null;
+
+    for (let i = 0; i < p2pSellData.data.length; i++) {
+        let ad = p2pSellData.data[i];
+        if (
+            ad.adv.minSingleTransQuantity < boughtAsset &&
+            boughtAsset < ad.adv.maxSingleTransQuantity
+        ) {
+            p2pSellAdv = ad;
+            break;
+        }
+    }
+
+    if (p2pSellAdv == null) {
+        return sendErrorResponse(req, res, "No sell advert found.");
+    }
+
+    // Now calculate the final soldCurrencyAmount using the above selected advertisement price for selling
+    let soldCurrencyAmount = boughtAsset * p2pSellAdv.adv.price;
+
+    // Return the data to be rendered on the frontend
+    res.json({
+        asset: asset,
+        buyPrice: p2pBuyAdv.adv.price,
+        boughtAsset: boughtAsset,
+        buyAdvId: p2pBuyAdv.advertiser.userNo,
+        buyAdvertiser: p2pBuyAdv.advertiser.nickName,
+        sellPrice: p2pSellAdv.adv.price,
+        soldCurrencyAmount,
+        sellAdvId: p2pSellAdv.advertiser.userNo,
+        sellAdvertiser: p2pSellAdv.advertiser.nickName,
+        fiatRate: exchangeData.info.rate,
+        fiatTotalAmount
+    });
 });
 
 /**
@@ -88,35 +146,108 @@ app.get('/get-results', async (req, res) => {
  * @param {*} amount
  * @param {*} paymentMethod
  * @param {*} currency
+ * @param {*} asset
  * @returns
  */
-async function fetchP2PData(tradeType, amount, paymentMethod, currency) {
-  let p2pData = null;
+async function fetchP2PData(tradeType, amount, paymentMethod, currency, asset) {
+    let p2pData = null;
+    const API_ENDPOINT = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
+    const data = {
+        proMerchantAds: false,
+        page: 1,
+        rows: 20,
+        payTypes: [paymentMethod],
+        countries: [],
+        publisherType: null,
+        asset: asset,
+        fiat: currency,
+        tradeType: tradeType,
+        transAmount: amount
+    };
 
-  const API_ENDPOINT =
-    'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
+    await axios.post(API_ENDPOINT, data)
+        .then((response) => {
+            p2pData = response.data;
+            // console.log(p2pData);
+        })
+        .catch(function (error) {
+            // console.log(error);
+            console.log("ErrorCode: " + error.code  + ", ErrorMessage: " + error.message);
+            p2pData = prepareError(error);
+        });
 
-  const data = {
-    proMerchantAds: false,
-    page: 1,
-    rows: 20,
-    payTypes: [paymentMethod],
-    countries: [],
-    publisherType: null,
-    asset: 'USDT',
-    fiat: currency,
-    tradeType: tradeType,
-    transAmount: amount
-  };
+    return p2pData;
+}
 
-  await axios.post(API_ENDPOINT, data).then((response) => {
-    p2pData = response.data;
-  });
+/**
+ * @param {*} error The error object
+ * @returns {{}} A standardised error object, containing the following keys:prepareError(error)
+ * <ul>
+ * <li>hasError - bool - TRUE if error details exist</li>
+ * <li>errorCode - string - The error code</li>
+ * <li>errorMessage - string - The error message</li>
+ * <li>binanceCode - string - The binance P2P API response code</li>
+ * <li>binanceMessage - string - The binance P2P API response message</li>
+ * <li>compactOutput - string - Concatenated output containing the errorCode and errorMessage</li>
+ * <li>fullOutput - string - Concatenated output containing the binance code/message in addition to the compactOutput</li>
+ * </ul>
+ */
+function prepareError(error) {
+    let response = {};
 
-  return p2pData;
+    if (error.code) {
+        response.errorCode = error.code;
+    }
+
+    if (error.message) {
+        response.errorMessage = error.message;
+    }
+
+    if (error.cause) {
+        if (error.cause.code) {
+            response.errorCode = error.cause.code;
+        }
+
+        if (error.cause.message) {
+            response.errorMessage = error.cause.message;
+        }
+    }
+
+    if (error.response && error.response.data) {
+        if (error.response.data.code) {
+            response.binanceCode = error.response.data.code;
+        }
+
+        if (error.response.data.message) {
+            response.binanceMessage = error.response.data.message;
+        }
+    }
+
+    let compactOutput = response.errorCode ? "[" + response.errorCode + "] " : "";
+    compactOutput += response.errorMessage ? response.errorMessage : "";
+    let fullOutput = compactOutput;
+    fullOutput += response.binanceCode ? " - Binance: [" + response.binanceCode + "] " : "";
+    fullOutput += response.binanceMessage ? response.binanceMessage : "";
+    response.compactOutput = compactOutput;
+    response.fullOutput = fullOutput;
+    response.hasError = response.errorCode || response.errorMessage;
+
+    return response;
+}
+
+/**
+ * Send an error response
+ * @param {Request} req The request object
+ * @param {Response} res The response object
+ * @param {{}} error The error object
+ */
+function sendErrorResponse(req, res, error) {
+    res.json({
+        error: error
+    });
 }
 
 let port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`Server started on ${port}`);
+    console.log(`Server started on ${port}`);
 });
