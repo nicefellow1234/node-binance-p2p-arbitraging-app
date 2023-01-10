@@ -131,12 +131,12 @@ app.get('/get-results', async (req, res) => {
     // Return the data to be rendered on the frontend
     res.json({
         asset: asset,
-        buyPrice: currencyFormat(p2pBuyAdv.adv.price),
+        buyPrice: p2pBuyAdv.adv.price,
         buyAssetLimit: currencyFormat(p2pBuyAdv.adv.surplusAmount),
         boughtAssetAmount: currencyFormat(boughtAssetAmount),
         buyAdvId: p2pBuyAdv.advertiser.userNo,
         buyAdvertiser: p2pBuyAdv.advertiser.nickName,
-        sellPrice: currencyFormat(p2pSellAdv.adv.price),
+        sellPrice: p2pSellAdv.adv.price,
         sellAssetLimit: currencyFormat(p2pSellAdv.adv.surplusAmount),
         soldCurrencyAmount: currencyFormat(soldCurrencyAmount),
         sellAdvId: p2pSellAdv.advertiser.userNo,
