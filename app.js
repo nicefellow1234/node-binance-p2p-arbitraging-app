@@ -69,7 +69,8 @@ app.get('/get-results', async (req, res) => {
     }
 
     // Calculate the fiat exchange total amount of the buyAmount
-    let fiatTotalAmount = Math.round(buyAmount * exchangeData.info.rate);
+    let fiatRate = exchangeData.info.rate;
+    let fiatTotalAmount = Math.round(buyAmount * fiatRate);
 
     // Fetch buyCurrency P2P data using Wise payment method & buyAmount
     let p2pBuyData = await fetchP2PData('BUY', buyAmount, 'Wise', buyCurrency, asset);
@@ -86,8 +87,9 @@ app.get('/get-results', async (req, res) => {
         return sendErrorResponse(req, res, "No buy advert found.");
     }
 
-    // Calculate the boughtAsset using the above advertisement price
-    let boughtAsset = buyAmount / p2pBuyAdv.adv.price;
+    // Calculate the boughtAssetAmount using the above advertisement price
+    // console.log(p2pBuyAdv);
+    let boughtAssetAmount = buyAmount / p2pBuyAdv.adv.price;
 
     // Now fetch the sellCurrency P2P data using Bank Transfer payment method & fiatTotalAmount
     let p2pSellData = await fetchP2PData(
@@ -109,8 +111,8 @@ app.get('/get-results', async (req, res) => {
     for (let i = 0; i < p2pSellData.data.length; i++) {
         let ad = p2pSellData.data[i];
         if (
-            ad.adv.minSingleTransQuantity < boughtAsset &&
-            boughtAsset < ad.adv.maxSingleTransQuantity
+            ad.adv.minSingleTransQuantity < boughtAssetAmount &&
+            boughtAssetAmount < ad.adv.maxSingleTransQuantity
         ) {
             p2pSellAdv = ad;
             break;
@@ -122,23 +124,40 @@ app.get('/get-results', async (req, res) => {
     }
 
     // Now calculate the final soldCurrencyAmount using the above selected advertisement price for selling
-    let soldCurrencyAmount = boughtAsset * p2pSellAdv.adv.price;
+    // console.log(p2pSellAdv);
+    let soldCurrencyAmount = boughtAssetAmount * p2pSellAdv.adv.price;
+    let profit = currencyFormat(soldCurrencyAmount - fiatTotalAmount);
 
     // Return the data to be rendered on the frontend
     res.json({
         asset: asset,
-        buyPrice: p2pBuyAdv.adv.price,
-        boughtAsset: boughtAsset,
+        buyPrice: currencyFormat(p2pBuyAdv.adv.price),
+        buyAssetLimit: currencyFormat(p2pBuyAdv.adv.surplusAmount),
+        boughtAssetAmount: currencyFormat(boughtAssetAmount),
         buyAdvId: p2pBuyAdv.advertiser.userNo,
         buyAdvertiser: p2pBuyAdv.advertiser.nickName,
-        sellPrice: p2pSellAdv.adv.price,
-        soldCurrencyAmount,
+        sellPrice: currencyFormat(p2pSellAdv.adv.price),
+        sellAssetLimit: currencyFormat(p2pSellAdv.adv.surplusAmount),
+        soldCurrencyAmount: currencyFormat(soldCurrencyAmount),
         sellAdvId: p2pSellAdv.advertiser.userNo,
         sellAdvertiser: p2pSellAdv.advertiser.nickName,
-        fiatRate: exchangeData.info.rate,
-        fiatTotalAmount
+        fiatRate: currencyFormat(fiatRate),
+        fiatTotalAmount: currencyFormat(fiatTotalAmount),
+        profit: currencyFormat(profit),
+        exchangeSummary: "Exchange: " + buyAmount + " " + buyCurrency + " exchanges to " + currencyFormat(fiatTotalAmount) + " " + sellCurrency + " at a rate of " + currencyFormat(fiatRate) + " " + sellCurrency + ".",
+        buySummary: "Bought " + currencyFormat(boughtAssetAmount) + " " + asset + " with " + buyAmount + " " + buyCurrency + ".",
+        sellSummary: "Sold " + currencyFormat(boughtAssetAmount) + " " + asset + " for " + currencyFormat(soldCurrencyAmount) + " " + sellCurrency + ".",
+        profitSummary: "Profit: " + currencyFormat(profit) + " " + sellCurrency + "."
     });
 });
+
+/**
+ * @param {number} amount
+ * @returns {number}
+ */
+function currencyFormat(amount) {
+    return Math.round(amount * 100) / 100;
+}
 
 /**
  * Fetches P2P data from Binance API using the given params

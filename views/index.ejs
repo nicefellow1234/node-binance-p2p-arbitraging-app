@@ -65,26 +65,37 @@
                     </div>
                 </div>
                 <div v-show="showData" style="display:none">
+                    <div class="container-fluid card my-3">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">{{ exchangeSummary }}</li>
+                            <li class="list-group-item">{{ buySummary }}</li>
+                            <li class="list-group-item">{{ sellSummary }}</li>
+                            <li class="list-group-item">{{ profitSummary }}</li>
+                        </ul>
+                    </div>
                     <div class="row">
                         <div class="col-sm-4 mt-3">
                             <h2>Buy Details</h2>
-                            <div class="h4"><span class="fw-bold">Advertiser: </span> {{ buyAdvertiser }}</div>
-                            <div class="h4"><span class="fw-bold">Price: </span> {{ buyPrice }} {{ buyCurrency }}</div>
-                            <div class="h4"><span class="fw-bold">Amount: </span> {{ boughtAsset }} {{ asset }}</div>
-                            <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${buyAdvId}`" target="_blank" class="btn btn-dark px-5">Visit Ad</a>
+                            <div class="h4"><span class="fw-bold">Advertiser: </span> <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${buyAdvId}`" target="_blank" class="btn btn-dark px-5">{{ buyAdvertiser }}</a></div>
+                            <div class="h4"><span class="fw-bold">Unit Price: </span> {{ buyPrice }} {{ buyCurrency }}</div>
+                            <div class="h4"><span class="fw-bold">Buy Limit: </span> {{ buyAssetLimit }} {{ asset }}</div>
+                            <div class="h4"><span class="fw-bold">Purchase Amount: </span> {{ boughtAssetAmount }} {{ asset }}</div>
+                            <div class="h4"><span class="fw-bold">Total Cost: </span> {{ buyAmount }} {{ buyCurrency }}</div>
                         </div>
                         <div class="col-sm-4 mt-3">
                             <h2>Sell Details</h2>
-                            <div class="h4"><span class="fw-bold">Advertiser: </span> {{ sellAdvertiser }}</div>
-                            <div class="h4"><span class="fw-bold">Price: </span> {{ sellPrice }} {{ asset }}</div>
-                            <div class="h4"><span class="fw-bold">Amount: </span> {{ soldCurrencyAmount }} {{ sellCurrency }}</div>
-                            <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${sellAdvId}`" target="_blank" class="btn btn-dark px-5">Visit Ad</a>
+                            <div class="h4"><span class="fw-bold">Advertiser: </span> <a :href="`https://p2p.binance.com/en/advertiserDetail?advertiserNo=${sellAdvId}`" target="_blank" class="btn btn-dark px-5">{{ sellAdvertiser }}</a></div>
+                            <div class="h4"><span class="fw-bold">Unit Price: </span> {{ sellPrice }} {{ sellCurrency }}</div>
+                            <div class="h4"><span class="fw-bold">Sell Limit: </span> {{ sellAssetLimit }} {{ asset }}</div>
+                            <div class="h4"><span class="fw-bold">Sell Amount: </span> {{ boughtAssetAmount }} {{ asset }}</div>
+                            <div class="h4"><span class="fw-bold">Total Income: </span> {{ soldCurrencyAmount }} {{ sellCurrency }}</div>
                         </div>
                         <div class="col-sm-4 mt-3">
                             <h2>Fiat Details</h2>
                             <div class="h4"><span class="fw-bold">Buy Amount: </span> {{ buyAmount }} {{ buyCurrency }}</div>
                             <div class="h4"><span class="fw-bold">Exchange Rate: </span> {{ fiatRate }} {{ sellCurrency }}</div>
-                            <div class="h4"><span class="fw-bold">Total Amount: </span> {{ fiatTotalAmount }} {{ sellCurrency }}</div>
+                            <div class="h4"><span class="fw-bold">Converts To: </span> {{ fiatTotalAmount }} {{ sellCurrency }}</div>
+                            <div class="h4"><span class="fw-bold">Transaction Income: </span> {{ soldCurrencyAmount }} {{ sellCurrency }}</div>
                             <div class="h4"><span class="fw-bold">P2P Profit: </span> {{ p2pFinalProfit }} {{ sellCurrency }}</div>
                         </div>
                     </div>
@@ -111,19 +122,24 @@
                 error: null,
                 buyCurrency: '<%= buyCurrency %>',
                 buyAmount: '<%= buyAmount %>',
+                buyAssetLimit: 0,
+                sellAssetLimit: 0,
                 sellCurrency: '<%= sellCurrency %>',
                 buyAdvId: null,
                 buyAdvertiser: null,
                 buyPrice: null,
                 asset: '<%= asset %>',
-                boughtAsset: null,
+                boughtAssetAmount: null,
                 sellAdvId: null,
                 sellAdvertiser: null,
                 sellPrice: null,
                 soldCurrencyAmount: null,
                 fiatRate: null,
                 fiatTotalAmount: null,
-                p2pFinalProfit: null
+                p2pFinalProfit: null,
+                buySummary: null,
+                sellSummary: null,
+                profitSummary: null
             };
         },
         methods: {
@@ -133,7 +149,7 @@
                 this.showData = false;
                 axios.get('/get-results', {
                     params: {
-                        asset: this.asset,
+                        asset: this.asset || '<%= asset %>',
                         buyCurrency: this.buyCurrency,
                         buyAmount: this.buyAmount,
                         sellCurrency: this.sellCurrency
@@ -150,15 +166,20 @@
                     this.buyAdvId = response.data.buyAdvId;
                     this.buyAdvertiser = response.data.buyAdvertiser;
                     this.buyPrice = response.data.buyPrice;
-                    this.asset = response.asset;
-                    this.boughtAsset = Math.round(response.data.boughtAsset * 100) / 100;
+                    this.buyAssetLimit = response.data.buyAssetLimit;
+                    this.boughtAssetAmount = response.data.boughtAssetAmount;
                     this.sellAdvId = response.data.sellAdvId;
                     this.sellAdvertiser = response.data.sellAdvertiser;
                     this.sellPrice = response.data.sellPrice;
-                    this.soldCurrencyAmount = Math.round(response.data.soldCurrencyAmount * 100) / 100;
+                    this.sellAssetLimit = response.data.sellAssetLimit;
+                    this.soldCurrencyAmount = response.data.soldCurrencyAmount;
                     this.fiatRate = response.data.fiatRate;
                     this.fiatTotalAmount = response.data.fiatTotalAmount;
-                    this.p2pFinalProfit = Math.round((this.soldCurrencyAmount - this.fiatTotalAmount) * 100) / 100;
+                    this.p2pFinalProfit = response.data.profit;
+                    this.exchangeSummary = response.data.exchangeSummary;
+                    this.buySummary = response.data.buySummary;
+                    this.sellSummary = response.data.sellSummary;
+                    this.profitSummary = response.data.profitSummary;
 
                     // Show data and hide the processing icon
                     this.processingIcon = false;
