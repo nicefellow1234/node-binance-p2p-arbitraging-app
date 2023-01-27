@@ -43,21 +43,49 @@ app.get('/get-results', async (req, res) => {
     let buyAmount = req.query.buyAmount;
     let buyCurrency = req.query.buyCurrency;
     let sellCurrency = req.query.sellCurrency;
+    let fiatRate = null;
     let apiError = null;
+    let fiatAPI = null;
     console.log("get-results: Buy " + asset + " worth " + buyAmount + " " + buyCurrency);
+
+    // API Endpoints for fiat exchange rate fetching
+    let EXCHANGERATE_API_ENDPOINT = `https://api.exchangerate.host/convert?from=${buyCurrency}&to=${sellCurrency}`;
+    let WISE_API_ENDPOINT = `https://api.wise.com/v1/rates?source=${buyCurrency}&target=${sellCurrency}`;
+
+    // Wise API Authorization headers
+    let config = {
+        headers: {
+            "Authorization": "Basic OGNhN2FlMjUtOTNjNS00MmFlLThhYjQtMzlkZTFlOTQzZDEwOjliN2UzNmZkLWRjYjgtNDEwZS1hYzc3LTQ5NGRmYmEyZGJjZA=="
+        }
+    }
 
     // Fetch the fiat exchange data from the API using the buyCurrency & sellCurrency
     await axios
         .get(
-            `https://api.exchangerate.host/convert?from=${buyCurrency}&to=${sellCurrency}`
+            WISE_API_ENDPOINT, config
         )
         .then((response) => {
             exchangeData = response.data;
+            // Deduct 1% from actual rate to accommodate for the service charges incurred by Wise
+            fiatActualRate = exchangeData[0].rate;
+            fiatRate = fiatActualRate - (fiatActualRate * 0.01);
+            fiatAPI = 'Wise';
         })
-        .catch(function (error) {
-            console.log("Error getting exchange rate. ErrorCode: " + error.cause.code  + ", ErrorMessage: " + error.cause.message);
-            //console.log(error);
-            apiError = prepareError(error);
+        .catch(async function (error) {
+            // If Wise doesn't work then go ahead and fetch the exchange rate from exchange rate API
+            console.log(error.data);
+            await axios
+                .get(
+                    EXCHANGERATE_API_ENDPOINT
+                )
+                .then((response) => {
+                    exchangeData = response.data;
+                    fiatRate = exchangeData.info.rate;
+                    fiatAPI = 'Exchange Rate';
+                }).catch(function (error) {
+                    console.log("Error getting exchange rate. ErrorCode: " + error.cause.code  + ", ErrorMessage: " + error.cause.message);
+                    apiError = prepareError(error);
+                });
         });
 
     if (apiError != null) {
@@ -69,7 +97,6 @@ app.get('/get-results', async (req, res) => {
     }
 
     // Calculate the fiat exchange total amount of the buyAmount
-    let fiatRate = exchangeData.info.rate;
     let fiatTotalAmount = Math.round(buyAmount * fiatRate);
 
     // Fetch buyCurrency P2P data using Wise payment method & buyAmount
@@ -141,6 +168,7 @@ app.get('/get-results', async (req, res) => {
         soldCurrencyAmount: currencyFormat(soldCurrencyAmount),
         sellAdvId: p2pSellAdv.advertiser.userNo,
         sellAdvertiser: p2pSellAdv.advertiser.nickName,
+        fiatAPI: fiatAPI,
         fiatRate: currencyFormat(fiatRate),
         fiatTotalAmount: currencyFormat(fiatTotalAmount),
         profit: currencyFormat(profit),
