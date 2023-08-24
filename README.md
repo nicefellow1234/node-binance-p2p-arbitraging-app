@@ -14,6 +14,6 @@ Then, run `npm run start` or `npm run nodemon` (rebuilds automatically on change
 
 # Demo App
 
-https://node-binance-p2p-arbitraging-app.onrender.com/
+https://talented-dove-overcoat.cyclic.app/
 
 
